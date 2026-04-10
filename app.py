@@ -1,4 +1,6 @@
+import re
 import pickle
+import requests
 import torch
 import torch.nn.functional as F
 import pandas as pd
@@ -8,6 +10,9 @@ from model import NCF
 st.set_page_config(page_title="Movie Recommender", page_icon="🎬", layout="wide")
 st.title("🎬 Movie Recommender — Neural Collaborative Filtering")
 st.caption("Trained on MovieLens Latest Small (100K ratings, 9.7K movies)")
+
+TMDB_API_KEY = st.secrets["TMDB_API_KEY"]
+TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w300"
 
 @st.cache_resource
 def load_model_and_data():
@@ -28,6 +33,28 @@ def load_model_and_data():
     item_embeddings = model.get_item_embeddings()
 
     return model, movies, enc, item_embeddings
+
+@st.cache_data(show_spinner=False)
+def fetch_poster(title: str):
+    # titles are like "Toy Story (1995)" — split out the year for a better TMDB match
+    match = re.match(r"^(.*)\((\d{4})\)$", title.strip())
+    if match:
+        query, year = match.group(1).strip(), match.group(2)
+    else:
+        query, year = title.strip(), None
+
+    params = {"api_key": TMDB_API_KEY, "query": query}
+    if year:
+        params["year"] = year
+
+    try:
+        r = requests.get("https://api.themoviedb.org/3/search/movie", params=params, timeout=5)
+        results = r.json().get("results", [])
+        if results and results[0].get("poster_path"):
+            return TMDB_IMAGE_BASE + results[0]["poster_path"]
+    except Exception:
+        pass
+    return None
 
 model, movies, enc, item_embeddings = load_model_and_data()
 
@@ -75,11 +102,10 @@ if st.button("Get Recommendations", disabled=len(selected) < 3):
     selected_indices = [title_to_idx[t] for t in selected if t in title_to_idx]
     selected_embs = item_embeddings[selected_indices]
 
-    # average the selected movie embeddings into one taste vector
     taste_vector = selected_embs.mean(dim=0, keepdim=True)
 
     similarities = F.cosine_similarity(taste_vector, item_embeddings, dim=1)
-    similarities[selected_indices] = -1  # don't recommend what they already picked
+    similarities[selected_indices] = -1
 
     top_indices = similarities.argsort(descending=True)[:n_recommendations]
     top_scores = similarities[top_indices]
@@ -90,13 +116,28 @@ if st.button("Get Recommendations", disabled=len(selected) < 3):
     st.markdown("---")
     st.markdown("### Recommended for you")
 
-    for rank, (idx, score) in enumerate(zip(top_indices.tolist(), top_scores.tolist()), 1):
+    # fetch posters for all results upfront
+    recs = []
+    for idx, score in zip(top_indices.tolist(), top_scores.tolist()):
         title = idx_to_title.get(idx, "Unknown")
         genre = idx_to_genre.get(idx, "")
-        col1, col2, col3 = st.columns([3, 2, 1])
-        col1.markdown(f"**{rank}. {title}**")
-        col2.caption(genre.replace("|", " · "))
-        col3.progress(float(score), text=f"{score:.2f}")
+        poster = fetch_poster(title)
+        recs.append({"title": title, "genre": genre, "score": score, "poster": poster})
+
+    # display in a grid — 5 columns per row
+    cols_per_row = 5
+    for row_start in range(0, len(recs), cols_per_row):
+        row = recs[row_start:row_start + cols_per_row]
+        cols = st.columns(cols_per_row)
+        for col, rec in zip(cols, row):
+            with col:
+                if rec["poster"]:
+                    st.image(rec["poster"], use_container_width=True)
+                else:
+                    st.markdown("🎬")
+                st.markdown(f"**{rec['title']}**")
+                st.caption(rec["genre"].replace("|", " · "))
+                st.progress(float(rec["score"]), text=f"{rec['score']:.2f}")
 
     with st.expander("How this works"):
         st.markdown("""
@@ -105,7 +146,7 @@ if st.button("Get Recommendations", disabled=len(selected) < 3):
 Movies that tend to be watched and rated together end up with similar vectors — similar to how word2vec works for words.
 
 When you pick movies you liked:
-1. Grab each movie's vector
+1. Grab each movie's embedding vector
 2. Average them into a single taste vector
 3. Find movies closest to that vector using cosine similarity
 4. Return the top matches

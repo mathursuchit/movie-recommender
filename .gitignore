@@ -5,3 +5,4 @@ data/ml-latest-small/
 data/ml-latest-small.zip
 data/ml-1m/
 data/ml-1m.zip
+.streamlit/secrets.toml
