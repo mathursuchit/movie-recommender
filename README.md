@@ -2,7 +2,7 @@
 
 A movie recommendation system built with Neural Collaborative Filtering (NCF), trained on the MovieLens Latest Small dataset.
 
-**Live demo:** https://mathursuchit-movie-recommender.streamlit.app
+**Live demo:** https://mathursuchit-movie-recommender.streamlit.app/
 
 ## How it works
 
