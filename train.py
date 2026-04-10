@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
-from model import NCF
+from model import MF
 
 print("Loading data...")
 ratings = pd.read_csv(
@@ -23,6 +23,10 @@ movies = pd.read_csv(
     names=["movie_id", "title", "genres"],
     skiprows=1
 )
+
+# drop movies with fewer than 20 ratings — sparse movies have poorly trained embeddings
+movie_counts = ratings["movie_id"].value_counts()
+ratings = ratings[ratings["movie_id"].isin(movie_counts[movie_counts >= 20].index)]
 
 # embeddings need 0-indexed integers, raw IDs won't work
 user_ids = {uid: idx for idx, uid in enumerate(ratings["user_id"].unique())}
@@ -67,7 +71,7 @@ val_loader = DataLoader(RatingsDataset(val_df), batch_size=1024)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Training on: {device}")
 
-model = NCF(num_users, num_items, embedding_dim=64, layers=[128, 64, 32]).to(device)
+model = MF(num_users, num_items, embedding_dim=64).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 criterion = nn.BCELoss()
 

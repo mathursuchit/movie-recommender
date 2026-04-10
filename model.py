@@ -2,46 +2,34 @@ import torch
 import torch.nn as nn
 
 
-class NCF(nn.Module):
+class MF(nn.Module):
     """
-    Neural Collaborative Filtering (He et al., 2017)
+    Matrix Factorization — learns a vector for each user and each movie.
+    Predicted rating = dot product of user and movie vectors.
 
-    Each user and movie gets a learned embedding vector.
-    Concatenate the two, run through MLP layers, output a score.
+    Unlike NCF, item embeddings here are pure item representations —
+    not conditioned on users — so cosine similarity between them works well
+    for finding similar movies at inference time.
     """
 
-    def __init__(self, num_users, num_items, embedding_dim=64, layers=[128, 64, 32]):
+    def __init__(self, num_users, num_items, embedding_dim=64):
         super().__init__()
-
         self.user_emb = nn.Embedding(num_users, embedding_dim)
         self.item_emb = nn.Embedding(num_items, embedding_dim)
+        self.user_bias = nn.Embedding(num_users, 1)
+        self.item_bias = nn.Embedding(num_items, 1)
 
-        self.fc_layers = nn.ModuleList()
-        input_size = embedding_dim * 2  # user + item concatenated
-        for size in layers:
-            self.fc_layers.append(nn.Linear(input_size, size))
-            input_size = size
-
-        self.output_layer = nn.Linear(layers[-1], 1)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-
-        self._init_weights()
-
-    def _init_weights(self):
-        nn.init.xavier_uniform_(self.user_emb.weight)
-        nn.init.xavier_uniform_(self.item_emb.weight)
-        for layer in self.fc_layers:
-            nn.init.xavier_uniform_(layer.weight)
+        nn.init.normal_(self.user_emb.weight, std=0.01)
+        nn.init.normal_(self.item_emb.weight, std=0.01)
+        nn.init.zeros_(self.user_bias.weight)
+        nn.init.zeros_(self.item_bias.weight)
 
     def forward(self, user_ids, item_ids):
         u = self.user_emb(user_ids)
         v = self.item_emb(item_ids)
-        x = torch.cat([u, v], dim=-1)
-        for layer in self.fc_layers:
-            x = self.relu(layer(x))
-        return self.sigmoid(self.output_layer(x)).squeeze()
+        dot = (u * v).sum(dim=1, keepdim=True)
+        bias = self.user_bias(user_ids) + self.item_bias(item_ids)
+        return torch.sigmoid(dot + bias).squeeze()
 
     def get_item_embeddings(self):
-        # used at inference time to find similar movies
         return self.item_emb.weight.detach()

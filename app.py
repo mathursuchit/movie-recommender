@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 import pandas as pd
 import streamlit as st
-from model import NCF
+from model import MF
 
 st.set_page_config(page_title="Movie Recommender", page_icon="🎬", layout="wide")
 st.title("🎬 Movie Recommender — Neural Collaborative Filtering")
@@ -21,11 +21,10 @@ def load_model_and_data():
         enc = pickle.load(f)
 
     checkpoint = torch.load("data/model.pt", map_location="cpu")
-    model = NCF(
+    model = MF(
         checkpoint["num_users"],
         checkpoint["num_items"],
         embedding_dim=64,
-        layers=[128, 64, 32]
     )
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
