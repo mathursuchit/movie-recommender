@@ -7,8 +7,8 @@ import pandas as pd
 import streamlit as st
 from model import MF
 
-st.set_page_config(page_title="Movie Recommender", page_icon="🎬", layout="wide")
-st.title("🎬 Movie Recommender — Neural Collaborative Filtering")
+st.set_page_config(page_title="Movie Recommender", page_icon=None, layout="wide")
+st.title("Movie Recommender — Neural Collaborative Filtering")
 st.caption("Trained on MovieLens Latest Small (100K ratings, 9.7K movies)")
 
 TMDB_API_KEY = st.secrets["TMDB_API_KEY"]
@@ -133,7 +133,7 @@ if st.button("Get Recommendations", disabled=len(selected) < 3):
                 if rec["poster"]:
                     st.image(rec["poster"], use_container_width=True)
                 else:
-                    st.markdown("🎬")
+                    st.markdown("No poster available")
                 st.markdown(f"**{rec['title']}**")
                 st.caption(rec["genre"].replace("|", " · "))
                 st.progress(float(rec["score"]), text=f"{rec['score']:.2f}")
